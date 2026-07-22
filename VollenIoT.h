@@ -64,6 +64,7 @@ public:
     bool getDeviceState(const char* deviceId) const;
     void toggleDevice(const char* deviceId);
     void setDeveloperMode(bool enable);
+    bool isDeviceCommandInverted(const char* deviceId);
 
     void onStateChange(void (*callback)(const char* deviceId, bool state));
 

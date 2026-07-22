@@ -231,6 +231,24 @@ void VollenIoT::toggleDevice(const char* id) {
     setDeviceState(id, !_devices[idx].state);
 }
 
+bool VollenIoT::isDeviceCommandInverted(const char* id) {
+    int idx = _findDevice(id);
+    if (idx < 0) return false;
+
+    int valOn = atoi(_devices[idx].comandoOn);
+    int valOff = atoi(_devices[idx].comandoOff);
+    bool isInverted = false;
+
+    if (valOn != valOff) {
+        isInverted = (valOn < valOff);
+    } else {
+        if (strcasecmp(_devices[idx].comandoOn, "OFF") == 0 || strcasecmp(_devices[idx].comandoOn, "false") == 0 || strcmp(_devices[idx].comandoOn, "0") == 0) {
+            isInverted = true;
+        }
+    }
+    return isInverted;
+}
+
 // -----------------------------------------------------------------------------
 // Callback
 // -----------------------------------------------------------------------------
@@ -319,7 +337,16 @@ void VollenIoT::_connectMQTT() {
     char clientId[32];
     snprintf(clientId, sizeof(clientId), "VollenIoT_ESP_%06X", ESP.getChipId());
 
-    if (_mqttClient.connect(clientId, _mqttUser, _mqttPass)) {
+    bool conectado = false;
+    char willTopic[128] = "";
+    if (_deviceCount > 0 && _devices[0].active) {
+        snprintf(willTopic, sizeof(willTopic), "%s/status", _devices[0].id);
+        conectado = _mqttClient.connect(clientId, _mqttUser, _mqttPass, willTopic, 1, true, "offline");
+    } else {
+        conectado = _mqttClient.connect(clientId, _mqttUser, _mqttPass);
+    }
+
+    if (conectado) {
         Serial.println("[VollenIoT] Dispositivo conectado ao servidor.");
         _duplicateDetected = false;
 
