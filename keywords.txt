@@ -1,0 +1,33 @@
+# =============================================================================
+# VollenIoT keywords.txt - Destaque de sintaxe para Arduino IDE
+# =============================================================================
+
+# Classe
+VollenIoT	KEYWORD1
+
+# Métodos públicos
+addDevice	KEYWORD2
+removeDevice	KEYWORD2
+setDevicePin	KEYWORD2
+setDeviceName	KEYWORD2
+setDeviceCommand	KEYWORD2
+begin		KEYWORD2
+connect		KEYWORD2
+loop		KEYWORD2
+publishStatus	KEYWORD2
+publishState	KEYWORD2
+publishAllStatus	KEYWORD2
+publishAllState	KEYWORD2
+isWiFiConnected	KEYWORD2
+isMQTTConnected	KEYWORD2
+setDeviceState	KEYWORD2
+getDeviceState	KEYWORD2
+setDeviceType	KEYWORD2
+toggleDevice	KEYWORD2
+onStateChange	KEYWORD2
+
+# Tipos
+VollenDevice	KEYWORD1
+
+# Constantes
+MAX_DEVICES	LITERAL1
