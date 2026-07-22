@@ -7,7 +7,7 @@ Esta é a biblioteca oficial do ecossistema **Vollen IoT** para microcontrolador
 ## 🚀 Principais Recursos
 
 * **Comunicação Não Bloqueante:** A conexão WiFi e MQTT roda em segundo plano. Se a conexão cair, os botões e interruptores físicos do seu circuito continuam funcionando normalmente.
-* **Sincronização Dinâmica de Comandos (OTA):** A biblioteca aprende dinamicamente a ordem lógica dos comandos configurados no seu aplicativo celular (`0/1`, `1/0`, `2/3`, `4/5`, etc.) e inverte a saída do pino físico do relé automaticamente na memória RAM, sem que você precise regravar a Sketch.
+* **Sincronização Dinâmica de Comandos (OTA):** A biblioteca aprende dinamicamente a ordem lógica dos comandos configurados no seu aplicativo celular (`0/1` ou `1/0`) e inverte a saída do pino físico do relé automaticamente na memória RAM, sem que você precise regravar a Sketch.
 * **Temporizadores Embutidos:** Suporta configuração de timers direto pelo aplicativo para ligar/desligar com contagem regressiva em minutos e segundos de forma nativa.
 * **Proteção contra ID Duplicado:** Evita que duas placas rodem o mesmo ID ao mesmo tempo no broker MQTT.
 
@@ -117,8 +117,8 @@ void loop() {
 ## ⚙️ Sincronização e Inversão Dinâmica de Comandos (Active Low / Active High)
 
 A biblioteca detecta de forma totalmente inteligente as ordens de comandos numéricos e textuais configurados no painel do celular:
-* **Par de Comandos Padrão (`0/1` ou `2/3`...):** Ao ligar no app, o ESP recebe o maior valor e coloca o pino físico em nível lógico alto (`HIGH`). Ao desligar, recebe o menor valor e coloca em `LOW`.
-* **Par de Comandos Invertido (`1/0` ou `3/2`...):** Se você alterar no aplicativo para ligar com `0` (útil para relés de lógica invertida **Active Low**), a placa detecta automaticamente o menor valor como ativo e coloca o pino em `LOW` para ligar e `HIGH` para desligar.
+* **Par de Comandos Padrão (`0/1`):** Ao ligar no app, o ESP recebe o maior valor e coloca o pino físico em nível lógico alto (`HIGH`). Ao desligar, recebe o menor valor e coloca em `LOW`.
+* **Par de Comandos Invertido (`1/0`):** Se você alterar no aplicativo para ligar com `0` (útil para relés de lógica invertida **Active Low**), a placa detecta automaticamente a inversão e coloca o pino em `LOW` para ligar e `HIGH` para desligar.
 
 Isso significa que você tem controle absoluto da lógica elétrica do seu hardware direto pelo celular, **sem precisar reprogramar a sua placa física**!
 
