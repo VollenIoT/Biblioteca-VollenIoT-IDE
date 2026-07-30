@@ -25,6 +25,7 @@ getDeviceState	KEYWORD2
 setDeviceType	KEYWORD2
 toggleDevice	KEYWORD2
 onStateChange	KEYWORD2
+setHeartbeatInterval	KEYWORD2
 
 # Tipos
 VollenDevice	KEYWORD1
