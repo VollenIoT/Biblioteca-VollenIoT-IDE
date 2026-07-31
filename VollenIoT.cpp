@@ -77,7 +77,9 @@ bool VollenIoT::setDevicePin(const char* id, uint8_t pin) {
     _devices[idx].pin = pin;
     _devices[idx].defaultPin = pin;
     pinMode(pin, OUTPUT);
-    digitalWrite(pin, _devices[idx].state ? HIGH : LOW);
+    bool isInverted = isDeviceCommandInverted(id);
+    int pinVal = (_devices[idx].state ^ isInverted) ? HIGH : LOW;
+    digitalWrite(pin, pinVal);
     Serial.printf("[VollenIoT] Pino %d associado a %s\n", pin, _deviceLabel(idx));
     return true;
 }
@@ -205,20 +207,7 @@ void VollenIoT::setDeviceState(const char* id, bool newState) {
     }
 
     if (_devices[idx].pin != Vollen_NO_PIN) {
-        int valOn = atoi(_devices[idx].comandoOn);
-        int valOff = atoi(_devices[idx].comandoOff);
-        bool isInverted = false;
-
-        if (valOn != valOff) {
-            // Se forem comandos numéricos distintos (ex: 2/3 vs 3/2)
-            isInverted = (valOn < valOff);
-        } else {
-            // Se forem comandos de texto (ex: ON/OFF vs OFF/ON)
-            if (strcasecmp(_devices[idx].comandoOn, "OFF") == 0 || strcasecmp(_devices[idx].comandoOn, "false") == 0 || strcmp(_devices[idx].comandoOn, "0") == 0) {
-                isInverted = true;
-            }
-        }
-
+        bool isInverted = isDeviceCommandInverted(id);
         int pinVal = (newState ^ isInverted) ? HIGH : LOW;
         digitalWrite(_devices[idx].pin, pinVal);
     }
@@ -239,18 +228,18 @@ bool VollenIoT::isDeviceCommandInverted(const char* id) {
     int idx = _findDevice(id);
     if (idx < 0) return false;
 
+    // Se comandoOn for "0" ou "OFF" ou "false", é invertido
+    if (strcmp(_devices[idx].comandoOn, "0") == 0 || strcasecmp(_devices[idx].comandoOn, "OFF") == 0 || strcasecmp(_devices[idx].comandoOn, "false") == 0) {
+        return true;
+    }
+
     int valOn = atoi(_devices[idx].comandoOn);
     int valOff = atoi(_devices[idx].comandoOff);
-    bool isInverted = false;
-
-    if (valOn != valOff) {
-        isInverted = (valOn < valOff);
-    } else {
-        if (strcasecmp(_devices[idx].comandoOn, "OFF") == 0 || strcasecmp(_devices[idx].comandoOn, "false") == 0 || strcmp(_devices[idx].comandoOn, "0") == 0) {
-            isInverted = true;
-        }
+    if (valOn != 0 || valOff != 0) {
+        if (valOn < valOff) return true;
     }
-    return isInverted;
+
+    return false;
 }
 
 // -----------------------------------------------------------------------------
@@ -284,7 +273,9 @@ void VollenIoT::_setupPins() {
     for (uint8_t i = 0; i < _deviceCount; i++) {
         if (_devices[i].active && _devices[i].pin != Vollen_NO_PIN) {
             pinMode(_devices[i].pin, OUTPUT);
-            digitalWrite(_devices[i].pin, _devices[i].state ? HIGH : LOW);
+            bool isInverted = isDeviceCommandInverted(_devices[i].id);
+            int pinVal = (_devices[i].state ^ isInverted) ? HIGH : LOW;
+            digitalWrite(_devices[i].pin, pinVal);
         }
     }
 }
@@ -502,7 +493,8 @@ bool VollenIoT::_processMessage(const char* topic, const uint8_t* payload, size_
         if (!config.isNull()) {
             const char* cmdOn = config["on"];
             const char* cmdOff = config["off"];
-            int idx = _findDevice(topic);
+            int idx = _findDevice(topicLower);
+            if (idx < 0) idx = _findDevice(topic);
             if (idx >= 0) {
                 if (cmdOn) strncpy(_devices[idx].comandoOn, cmdOn, sizeof(_devices[idx].comandoOn) - 1);
                 if (cmdOff) strncpy(_devices[idx].comandoOff, cmdOff, sizeof(_devices[idx].comandoOff) - 1);
@@ -512,24 +504,30 @@ bool VollenIoT::_processMessage(const char* topic, const uint8_t* payload, size_
 
                     if (newPin >= 0) {
                         if (oldPin != Vollen_NO_PIN && oldPin != (uint8_t)newPin) {
-                            digitalWrite(oldPin, LOW);
+                            bool oldInverted = isDeviceCommandInverted(topic);
+                            digitalWrite(oldPin, oldInverted ? HIGH : LOW);
                             pinMode(oldPin, INPUT);
                             Serial.printf("%s Pino antigo GPIO%d desligado e liberado.\n", _deviceLabel(idx), oldPin);
                         }
                         _devices[idx].pin = (uint8_t)newPin;
                         pinMode(_devices[idx].pin, OUTPUT);
-                        digitalWrite(_devices[idx].pin, _devices[idx].state ? HIGH : LOW);
+                        bool isInverted = isDeviceCommandInverted(topic);
+                        int pinVal = (_devices[idx].state ^ isInverted) ? HIGH : LOW;
+                        digitalWrite(_devices[idx].pin, pinVal);
                         Serial.printf("%s Pino GPIO reconfigurado via MQTT para: GPIO%d\n", _deviceLabel(idx), _devices[idx].pin);
                     } else {
                         if (oldPin != Vollen_NO_PIN && oldPin != _devices[idx].defaultPin) {
-                            digitalWrite(oldPin, LOW);
+                            bool oldInverted = isDeviceCommandInverted(topic);
+                            digitalWrite(oldPin, oldInverted ? HIGH : LOW);
                             pinMode(oldPin, INPUT);
                             Serial.printf("%s Pino antigo GPIO%d desligado e liberado.\n", _deviceLabel(idx), oldPin);
                         }
                         _devices[idx].pin = _devices[idx].defaultPin;
                         if (_devices[idx].pin != Vollen_NO_PIN) {
                             pinMode(_devices[idx].pin, OUTPUT);
-                            digitalWrite(_devices[idx].pin, _devices[idx].state ? HIGH : LOW);
+                            bool isInverted = isDeviceCommandInverted(topic);
+                            int pinVal = (_devices[idx].state ^ isInverted) ? HIGH : LOW;
+                            digitalWrite(_devices[idx].pin, pinVal);
                             Serial.printf("%s Pino GPIO restaurado para o padrao do Sketch: GPIO%d\n", _deviceLabel(idx), _devices[idx].pin);
                         } else {
                             Serial.printf("%s Pino GPIO redefinido para Padrao (Auto / Sketch sem pino associado)\n", _deviceLabel(idx));
@@ -611,7 +609,7 @@ bool VollenIoT::_processMessage(const char* topic, const uint8_t* payload, size_
         return true;
     }
 
-    setDeviceState(topic, newState);
+    setDeviceState(_devices[idx].id, newState);
     Serial.printf("%s %s\n", _deviceLabel(idx), newState ? "Ligado" : "Desligado");
     return true;
 }
