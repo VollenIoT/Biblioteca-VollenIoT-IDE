@@ -202,7 +202,7 @@ void VollenIoT::setDeviceState(const char* id, bool newState) {
                           _devices[idx].pendingAction ? "Ligar" : "Desligar");
         } else {
             _devices[idx].timerEnd = 0;
-            Serial.printf("%s Timer cancelado\n", _deviceLabel(idx));
+            Serial.printf("%s Temporizador aguardando proximo acionamento\n", _deviceLabel(idx));
         }
     }
 
