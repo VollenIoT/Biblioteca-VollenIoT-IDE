@@ -22,8 +22,16 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 
-
 #define Vollen_NO_PIN 255
+
+struct VollenSchedule {
+  bool active;
+  int hour;
+  int minute;
+  bool action;          // true = ON, false = OFF
+  uint8_t weekDaysMask; // Bit 0=Dom, Bit 1=Seg, ..., Bit 6=Sáb
+  bool executedThisMinute;
+};
 
 struct VollenDevice {
   const char *id;
@@ -39,6 +47,7 @@ struct VollenDevice {
   bool pendingAction;
   char comandoOff[8];
   char comandoOn[8];
+  VollenSchedule schedules[5];
 };
 
 class VollenIoT {

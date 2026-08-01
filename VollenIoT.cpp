@@ -337,11 +337,10 @@ void VollenIoT::loop() {
   }
 }
 
-// -----------------------------------------------------------------------------
-// Temporizador
-// -----------------------------------------------------------------------------
 void VollenIoT::_checkTimers() {
   unsigned long now = millis();
+
+  // 1. Temporizadores regressivos (ex: desligar em X minutos)
   for (uint8_t i = 0; i < _deviceCount; i++) {
     if (!_devices[i].active || _devices[i].timerEnd == 0)
       continue;
@@ -351,6 +350,39 @@ void VollenIoT::_checkTimers() {
       Serial.printf("%s Temporizador: %s\n", _deviceLabel(i),
                     alvo ? "Ligado" : "Desligado");
       setDeviceState(_devices[i].id, alvo);
+    }
+  }
+
+  // 2. Agendamentos com Dias da Semana (Horário de Brasília)
+  time_t tNow = time(nullptr);
+  struct tm *tInfo = localtime(&tNow);
+
+  if (tInfo) {
+    int curHour = tInfo->tm_hour;
+    int curMin = tInfo->tm_min;
+    int curWday = tInfo->tm_wday; // 0=Dom, 1=Seg, ..., 6=Sáb
+
+    for (uint8_t i = 0; i < _deviceCount; i++) {
+      if (!_devices[i].active) continue;
+
+      for (int s = 0; s < 5; s++) {
+        VollenSchedule &sch = _devices[i].schedules[s];
+        if (!sch.active) continue;
+
+        bool dayAllowed = (sch.weekDaysMask == 0xFF) || ((sch.weekDaysMask & (1 << curWday)) != 0);
+
+        if (dayAllowed && sch.hour == curHour && sch.minute == curMin) {
+          if (!sch.executedThisMinute) {
+            sch.executedThisMinute = true;
+            Serial.printf("%s Agendamento acionado (%02d:%02d, Dia %d): %s\n",
+                          _deviceLabel(i), curHour, curMin, curWday,
+                          sch.action ? "LIGADO" : "DESLIGADO");
+            setDeviceState(_devices[i].id, sch.action);
+          }
+        } else {
+          sch.executedThisMinute = false;
+        }
+      }
     }
   }
 }
@@ -382,6 +414,10 @@ void VollenIoT::_connectMQTT() {
   if (conectado) {
     Serial.println("[VollenIoT] Dispositivo conectado ao servidor.");
     _duplicateDetected = false;
+
+    // Configura relógio NTP assim que o Wi-Fi obtiver IP e conectar
+    configTime(-3 * 3600, 0, "a.st1.ntp.br", "b.st1.ntp.br", "pool.ntp.org");
+    Serial.println("[VollenIoT] Relógio NTP sincronizado (UTC-3).");
 
     publishAllStatus("online");
     for (uint8_t i = 0; i < _deviceCount; i++) {
@@ -461,6 +497,13 @@ bool VollenIoT::_processMessage(const char *topic, const uint8_t *payload,
   memcpy(message, payload, len);
   message[len] = '\0';
 
+  char topicLower[128];
+  strncpy(topicLower, topic, sizeof(topicLower) - 1);
+  topicLower[sizeof(topicLower) - 1] = '\0';
+  for (int i = 0; topicLower[i]; i++) {
+    topicLower[i] = tolower(topicLower[i]);
+  }
+
   // Verifica se é uma mensagem de status (deviceId/status)
   const char *slash = strchr(topic, '/');
   if (slash) {
@@ -500,22 +543,55 @@ bool VollenIoT::_processMessage(const char *topic, const uint8_t *payload,
       }
       return true;
     }
-    return false;
-  }
-
-  char topicLower[128];
-  strncpy(topicLower, topic, sizeof(topicLower) - 1);
-  topicLower[sizeof(topicLower) - 1] = '\0';
-  for (int i = 0; topicLower[i]; i++) {
-    topicLower[i] = tolower(topicLower[i]);
   }
 
   if (message[0] == '{') {
-    StaticJsonDocument<192> doc;
+    StaticJsonDocument<768> doc;
     DeserializationError err = deserializeJson(doc, message);
     if (err) {
       Serial.printf("[VollenIoT] Erro JSON: %s\n", err.c_str());
       return false;
+    }
+
+    // Processa agendamentos com dias da semana {"schedules": [...]}
+    JsonArray schedules = doc["schedules"].as<JsonArray>();
+    if (!schedules.isNull()) {
+      int idx = _findDevice(topicLower);
+      if (idx < 0) idx = _findDevice(topic);
+
+      if (idx >= 0) {
+        int count = 0;
+        for (JsonObject s : schedules) {
+          if (count >= 5) break;
+          bool active = s["active"] | true;
+          if (!active) continue;
+
+          _devices[idx].schedules[count].active = true;
+          _devices[idx].schedules[count].hour = s["hour"] | 0;
+          _devices[idx].schedules[count].minute = s["minute"] | 0;
+          const char *actStr = s["action"] | "OFF";
+          _devices[idx].schedules[count].action = (strcasecmp(actStr, "ON") == 0);
+
+          uint8_t mask = 0;
+          if (s.containsKey("days")) {
+            JsonArray days = s["days"].as<JsonArray>();
+            for (int d : days) {
+              if (d >= 0 && d <= 6) mask |= (1 << d);
+            }
+          } else {
+            mask = 0xFF;
+          }
+          _devices[idx].schedules[count].weekDaysMask = mask;
+          _devices[idx].schedules[count].executedThisMinute = false;
+          count++;
+        }
+        for (int i = count; i < 5; i++) {
+          _devices[idx].schedules[i].active = false;
+        }
+        Serial.printf("[VollenIoT] %d Agendamento(s) salvos no dispositivo via MQTT!\n",
+                      count);
+        return true;
+      }
     }
 
     // Verifica se é configuração dinâmica de comandos
