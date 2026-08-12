@@ -67,6 +67,7 @@ public:
 
   void publishStatus(const char *deviceId, const char *status);
   void publishState(const char *deviceId, bool state);
+  void publishRawState(const char *deviceId, const char *rawState);
   void publishAllStatus(const char *status);
   void publishAllState(bool state);
 
@@ -79,6 +80,7 @@ public:
   bool isDeviceCommandInverted(const char *deviceId);
 
   void onStateChange(void (*callback)(const char *deviceId, bool state));
+  void onRawMessage(void (*callback)(const char *deviceId, const char *message));
 
   // Configura intervalo do heartbeat (padrão: 30000ms = 30s)
   void setHeartbeatInterval(unsigned long intervalMs);
@@ -97,6 +99,7 @@ private:
   uint8_t _deviceCount;
 
   void (*_onStateChange)(const char *, bool);
+  void (*_onRawMessage)(const char *, const char *);
 
   unsigned long _lastReconnectAttempt;
   unsigned long _lastTimerCheck;

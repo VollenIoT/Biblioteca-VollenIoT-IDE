@@ -265,6 +265,10 @@ void VollenIoT::onStateChange(void (*callback)(const char *, bool)) {
   _onStateChange = callback;
 }
 
+void VollenIoT::onRawMessage(void (*callback)(const char *, const char *)) {
+  _onRawMessage = callback;
+}
+
 void VollenIoT::setHeartbeatInterval(unsigned long intervalMs) {
   _heartbeatInterval = intervalMs;
 }
@@ -397,6 +401,7 @@ void VollenIoT::_connectMQTT() {
   _wifiClient.setInsecure();
   _wifiClient.setTimeout(5);
   _mqttClient.setServer(_mqttHost, _mqttPort);
+  _mqttClient.setKeepAlive(15);
 
   char clientId[32];
   snprintf(clientId, sizeof(clientId), "VollenIoT_ESP_%06X", ESP.getChipId());
@@ -428,10 +433,7 @@ void VollenIoT::_connectMQTT() {
 
     for (uint8_t i = 0; i < _deviceCount; i++) {
       if (_devices[i].active) {
-        char statusTopic[128];
-        snprintf(statusTopic, sizeof(statusTopic), "%s/status", _devices[i].id);
         _mqttClient.subscribe(_devices[i].id, 1);
-        _mqttClient.subscribe(statusTopic, 1);
       }
     }
   }
@@ -459,7 +461,20 @@ void VollenIoT::publishState(const char *deviceId, bool state) {
     return;
   char topic[128];
   snprintf(topic, sizeof(topic), "%s/state", deviceId);
-  _mqttClient.publish(topic, state ? "ON" : "OFF", true);
+  int idx = _findDevice(deviceId);
+  const char *payload = state ? "ON" : "OFF";
+  if (idx >= 0) {
+    payload = state ? _devices[idx].comandoOn : _devices[idx].comandoOff;
+  }
+  _mqttClient.publish(topic, payload, true);
+}
+
+void VollenIoT::publishRawState(const char *deviceId, const char *rawState) {
+  if (!_mqttClient.connected())
+    return;
+  char topic[128];
+  snprintf(topic, sizeof(topic), "%s/state", deviceId);
+  _mqttClient.publish(topic, rawState, true);
 }
 
 void VollenIoT::publishAllStatus(const char *status) {
@@ -708,17 +723,17 @@ bool VollenIoT::_processMessage(const char *topic, const uint8_t *payload,
     }
     return true;
   }
+  if (_onRawMessage) {
+    _onRawMessage(topic, message);
+  }
 
   int idx = _findDevice(topicLower);
   if (idx < 0)
     idx = _findDevice(topic);
   if (idx < 0) {
-    Serial.printf("[VollenIoT] Dispositivo nao encontrado: %s\n", topic);
     return false;
   }
 
-  // Verifica se o comando recebido corresponde ao par configurado para este
-  // dispositivo
   bool newState = false;
   bool matched = false;
 
@@ -731,13 +746,11 @@ bool VollenIoT::_processMessage(const char *topic, const uint8_t *payload,
   }
 
   if (!matched) {
-    // Comando nao pertence a este dispositivo — ignora silenciosamente
     return true;
   }
 
   setDeviceState(_devices[idx].id, newState);
-  Serial.printf("%s %s\n", _deviceLabel(idx),
-                newState ? "Ligado" : "Desligado");
+  Serial.printf("%s %s\n", _deviceLabel(idx), newState ? "Ligado" : "Desligado");
   return true;
 }
 
